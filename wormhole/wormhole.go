@@ -177,6 +177,7 @@ func (c *Client) Receive(code string, callback ReceiveCallback) {
 			if msg.Type == wh.TransferDirectory {
 				name += ".zip"
 			}
+			name = sanitizeFilename(name)
 
 			callback.OnFileStart(name, msg.TransferBytes64)
 
@@ -261,6 +262,7 @@ func (c *Client) ReceiveWithAccept(code string, callback ReceiveOfferCallback) {
 			if msg.Type == wh.TransferDirectory {
 				name += ".zip"
 			}
+			name = sanitizeFilename(name)
 
 			pending := &PendingTransfer{
 				client:   c,
