@@ -180,15 +180,11 @@ func (c *Client) Receive(code string, callback ReceiveCallback) {
 
 			callback.OnFileStart(name, msg.TransferBytes64)
 
-			// Save to dataDir
+			// Save to dataDir, an internal staging area. The Android layer
+			// copies the result to the user-visible Downloads folder and then
+			// removes this file, so overwrite any leftover staging file rather
+			// than failing: os.Create truncates an existing file.
 			path := filepath.Join(c.dataDir, name)
-
-			// Check if file exists
-			if _, err := os.Stat(path); err == nil {
-				msg.Reject()
-				callback.OnError("file already exists: " + name)
-				return
-			}
 
 			f, err := os.Create(path)
 			if err != nil {

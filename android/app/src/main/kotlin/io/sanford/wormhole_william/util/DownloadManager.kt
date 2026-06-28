@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import io.sanford.wormhole_william.R
@@ -19,6 +20,9 @@ import java.io.FileInputStream
 
 private const val CHANNEL_ID = "wormhole_downloads"
 private const val NOTIFICATION_ID = 1001
+
+// Max filename length on Android storage (vfat/ext4 both cap at 255 bytes).
+private const val MAX_FILENAME_BYTES = 255
 
 /**
  * Registers a file with Android's Download Manager so it appears in the Downloads app.
@@ -47,6 +51,76 @@ fun Context.notifyDownloadManager(
         e.printStackTrace()
         Result.failure(e)
     }
+}
+
+/**
+ * Resolves the actual display name of a saved download. On Android 10+ the
+ * MediaStore automatically appends a numeric suffix (e.g. "report (1).pdf")
+ * when a file with the same name already exists in Downloads, so the saved
+ * name may differ from the requested one.
+ */
+fun Context.queryDownloadDisplayName(uri: Uri): String? {
+    // file:// URIs (legacy path) carry the name directly; ContentResolver does
+    // not answer OpenableColumns for them.
+    if (uri.scheme == "file") return uri.lastPathSegment
+    return try {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && cursor.moveToFirst()) cursor.getString(idx) else null
+            }
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/**
+ * Atomically creates and returns a new (empty) File in [dir], appending
+ * " (1)", " (2)", ... before the extension on collision, mirroring MediaStore's
+ * auto-rename so the legacy (pre-Android 10) path does not overwrite an existing
+ * download. Uses File.createNewFile() (an atomic create-if-absent) rather than a
+ * check-then-create, so a racing writer cannot cause an overwrite.
+ */
+private fun uniqueDownloadFile(dir: File, name: String): File {
+    val dot = name.lastIndexOf('.')
+    val base = if (dot > 0) name.substring(0, dot) else name
+    val ext = if (dot > 0) name.substring(dot) else ""
+
+    var candidate = File(dir, name)
+    var i = 1
+    while (!candidate.createNewFile()) {
+        val suffix = " ($i)"
+        // Keep the suffixed name within the filesystem's 255-byte limit by
+        // trimming the base; without this a near-max-length name could exceed
+        // the limit once the collision suffix is appended.
+        val room = MAX_FILENAME_BYTES - utf8Len(suffix) - utf8Len(ext)
+        candidate = File(dir, trimToBytes(base, room) + suffix + ext)
+        i++
+    }
+    return candidate
+}
+
+private fun utf8Len(s: String): Int = s.toByteArray(Charsets.UTF_8).size
+
+/**
+ * Trims s to at most maxBytes UTF-8 bytes without splitting a Unicode code
+ * point (so the result is always valid).
+ */
+private fun trimToBytes(s: String, maxBytes: Int): String {
+    if (maxBytes <= 0) return ""
+    if (utf8Len(s) <= maxBytes) return s
+
+    val sb = StringBuilder()
+    var bytes = 0
+    val it = s.codePoints().iterator()
+    while (it.hasNext()) {
+        val chunk = String(Character.toChars(it.nextInt()))
+        val chunkBytes = utf8Len(chunk)
+        if (bytes + chunkBytes > maxBytes) break
+        sb.append(chunk)
+        bytes += chunkBytes
+    }
+    return sb.toString()
 }
 
 private fun Context.copyToDownloadsViaMediaStore(
@@ -98,19 +172,29 @@ private fun Context.copyToDownloadsLegacy(
     // Copy to public Downloads directory
     @Suppress("DEPRECATION")
     val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-    val destFile = File(downloadsDir, name)
+    downloadsDir.mkdirs()
+    // Pick a non-colliding name so an existing download is not overwritten
+    // (MediaStore does this automatically on Android 10+).
+    val destFile = uniqueDownloadFile(downloadsDir, name)
 
-    FileInputStream(sourcePath).use { input ->
-        destFile.outputStream().use { output ->
-            input.copyTo(output)
+    try {
+        FileInputStream(sourcePath).use { input ->
+            destFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
         }
+    } catch (e: Exception) {
+        // uniqueDownloadFile already created (reserved) destFile; remove the
+        // 0-byte/partial file so a failed copy doesn't leave junk in Downloads.
+        destFile.delete()
+        throw e
     }
 
     // Register with DownloadManager
     val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     @Suppress("DEPRECATION")
     downloadManager.addCompletedDownload(
-        name,
+        destFile.name,
         "Received via Wormhole William",
         true,
         mimeType,
