@@ -1,33 +1,6 @@
 package io.sanford.wormhole_william.ui
 
-import android.app.Activity
-import android.content.Context
-import android.content.Intent
-import androidx.activity.result.contract.ActivityResultContract
-import com.google.zxing.integration.android.IntentIntegrator
-import com.google.zxing.integration.android.IntentResult
 import java.net.URLDecoder
-
-/**
- * Activity Result Contract for ZXing QR code scanning.
- */
-class ScanQRCodeContract : ActivityResultContract<Unit, String?>() {
-
-    override fun createIntent(context: Context, input: Unit): Intent {
-        val integrator = IntentIntegrator(context as Activity).apply {
-            setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
-            setPrompt("Scan a wormhole QR code")
-            setBeepEnabled(false)
-            setOrientationLocked(true)
-        }
-        return integrator.createScanIntent()
-    }
-
-    override fun parseResult(resultCode: Int, intent: Intent?): String? {
-        val result: IntentResult? = IntentIntegrator.parseActivityResult(resultCode, intent)
-        return result?.contents
-    }
-}
 
 /**
  * Result of parsing a wormhole URI.

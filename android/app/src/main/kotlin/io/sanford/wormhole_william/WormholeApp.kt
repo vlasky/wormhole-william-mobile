@@ -1,6 +1,5 @@
 package io.sanford.wormhole_william
 
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -29,6 +28,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,7 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.sanford.wormhole_william.ui.ScanQRCodeContract
+import io.sanford.wormhole_william.ui.QrScannerScreen
 import io.sanford.wormhole_william.ui.parseWormholeUri
 import io.sanford.wormhole_william.ui.screens.ReceiveScreen
 import io.sanford.wormhole_william.ui.screens.SendFileScreen
@@ -76,21 +76,26 @@ fun WormholeApp(
     // Shared ReceiveViewModel so QR scanner can set the code
     val receiveViewModel: ReceiveViewModel = viewModel()
 
-    // QR code scanner launcher
-    val qrScannerLauncher = rememberLauncherForActivityResult(
-        contract = ScanQRCodeContract()
-    ) { result ->
-        result?.let { scannedContent ->
-            // Parse the QR code content
-            val parsed = parseWormholeUri(scannedContent)
-            if (parsed != null) {
-                parsed.rendezvousUrl?.let { receiveViewModel.setRendezvousUrl(it) }
-                receiveViewModel.setCode(parsed.code)
-            } else {
-                // Fall back to using raw content as code
-                receiveViewModel.setCode(scannedContent)
-            }
-        }
+    // Whether the full-screen QR scanner overlay is showing.
+    var showScanner by remember { mutableStateOf(false) }
+
+    if (showScanner) {
+        QrScannerScreen(
+            onResult = { scannedContent ->
+                showScanner = false
+                // Parse the QR code content
+                val parsed = parseWormholeUri(scannedContent)
+                if (parsed != null) {
+                    parsed.rendezvousUrl?.let { receiveViewModel.setRendezvousUrl(it) }
+                    receiveViewModel.setCode(parsed.code)
+                } else {
+                    // Fall back to using raw content as code
+                    receiveViewModel.setCode(scannedContent)
+                }
+            },
+            onClose = { showScanner = false }
+        )
+        return
     }
 
     Scaffold(
@@ -145,7 +150,7 @@ fun WormholeApp(
             when (selectedTab) {
                 0 -> ReceiveScreen(
                     viewModel = receiveViewModel,
-                    onScanQR = { qrScannerLauncher.launch(Unit) }
+                    onScanQR = { showScanner = true }
                 )
                 1 -> SendTextScreen(initialText = (initialShare as? SharedData.Text)?.content)
                 2 -> SendFileScreen(initialFileUri = (initialShare as? SharedData.File)?.uri)
