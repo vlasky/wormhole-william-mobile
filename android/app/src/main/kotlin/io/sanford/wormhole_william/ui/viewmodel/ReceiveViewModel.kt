@@ -7,6 +7,8 @@ import io.sanford.wormhole_william.repository.WormholeRepository
 import io.sanford.wormhole_william.util.detectMimeType
 import io.sanford.wormhole_william.util.formatBytes
 import io.sanford.wormhole_william.util.notifyDownloadManager
+import io.sanford.wormhole_william.util.queryDownloadDisplayName
+import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -123,7 +125,22 @@ class ReceiveViewModel(application: Application) : AndroidViewModel(application)
                         )
 
                         val statusMsg = result.fold(
-                            onSuccess = { _ -> "File saved to Downloads: $fileName" },
+                            onSuccess = { uri ->
+                                // The copy to Downloads succeeded, so the
+                                // internal staging copy is no longer needed.
+                                // Removing it also prevents a later same-named
+                                // transfer from being wrongly blocked as
+                                // "already exists". Only delete on success: if
+                                // the copy failed, the staging file is the only
+                                // copy of the received file and must be kept.
+                                runCatching { File(state.path).delete() }
+                                val savedName = context.queryDownloadDisplayName(uri) ?: fileName
+                                if (savedName != fileName) {
+                                    "Saved to Downloads as $savedName (renamed to avoid overwriting an existing file)"
+                                } else {
+                                    "File saved to Downloads: $savedName"
+                                }
+                            },
                             onFailure = { e -> "File received but failed to copy to Downloads: ${e.message}" }
                         )
 

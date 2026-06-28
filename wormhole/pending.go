@@ -36,14 +36,12 @@ func (p *PendingTransfer) Accept() {
 	go func() {
 		defer p.cancel()
 
+		// dataDir is an internal, ephemeral staging area. The Kotlin layer
+		// copies the result into the user-visible Downloads folder and then
+		// deletes this staging file. Overwrite any leftover staging file
+		// (e.g. from a previous interrupted transfer) rather than failing:
+		// os.Create truncates an existing file.
 		path := filepath.Join(p.client.dataDir, p.name)
-
-		// Check if file exists
-		if _, err := os.Stat(path); err == nil {
-			p.msg.Reject()
-			p.callback.OnError("file already exists: " + p.name)
-			return
-		}
 
 		f, err := os.Create(path)
 		if err != nil {
