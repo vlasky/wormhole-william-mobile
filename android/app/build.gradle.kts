@@ -84,8 +84,18 @@ dependencies {
     // DataStore for preferences
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
-    // QR code scanning (ZXing)
-    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    // QR code generation (ZXing core only)
+    implementation("com.google.zxing:core:3.5.3")
+
+    // QR code scanning (CameraX + ML Kit). ZXing's Camera1 scanner fails to
+    // decode on some modern high-resolution sensors (e.g. Samsung S22 Ultra),
+    // so scanning uses ML Kit on CameraX (Camera2) instead.
+    val cameraxVersion = "1.3.4"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+    implementation("com.google.mlkit:barcode-scanning:17.2.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

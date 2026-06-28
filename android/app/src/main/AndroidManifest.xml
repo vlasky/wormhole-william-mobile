@@ -45,13 +45,6 @@
             </intent-filter>
         </activity>
 
-        <!-- ZXing QR Scanner Activity -->
-        <activity
-            android:name="com.journeyapps.barcodescanner.CaptureActivity"
-            android:screenOrientation="portrait"
-            android:stateNotNeeded="true"
-            tools:replace="android:screenOrientation" />
-
         <!-- File Provider for sharing files -->
         <provider
             android:name="androidx.core.content.FileProvider"
