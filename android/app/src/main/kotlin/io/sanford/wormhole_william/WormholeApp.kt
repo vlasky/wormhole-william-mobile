@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,8 +77,9 @@ fun WormholeApp(
     // Shared ReceiveViewModel so QR scanner can set the code
     val receiveViewModel: ReceiveViewModel = viewModel()
 
-    // Whether the full-screen QR scanner overlay is showing.
-    var showScanner by remember { mutableStateOf(false) }
+    // Whether the full-screen QR scanner overlay is showing. Saveable so a
+    // configuration change (e.g. rotation) mid-scan does not close the scanner.
+    var showScanner by rememberSaveable { mutableStateOf(false) }
 
     if (showScanner) {
         QrScannerScreen(

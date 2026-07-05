@@ -2,7 +2,9 @@ package io.sanford.wormhole_william.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.util.Size
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -10,6 +12,8 @@ import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -64,6 +68,10 @@ fun QrScannerScreen(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+
+    // The scanner is an overlay, not a destination: system back must dismiss
+    // it rather than fall through and background the activity.
+    BackHandler(onBack = onClose)
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -202,6 +210,19 @@ private fun CameraPreview(
                     }
 
                     val analysis = ImageAnalysis.Builder()
+                        // ML Kit recommends at least 1280x720 for barcode
+                        // scanning; CameraX's default analysis resolution
+                        // (640x480) decodes unreliably on some sensors.
+                        .setResolutionSelector(
+                            ResolutionSelector.Builder()
+                                .setResolutionStrategy(
+                                    ResolutionStrategy(
+                                        Size(1280, 720),
+                                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                                    )
+                                )
+                                .build()
+                        )
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
                         .also { it.setAnalyzer(analysisExecutor, analyzer) }
