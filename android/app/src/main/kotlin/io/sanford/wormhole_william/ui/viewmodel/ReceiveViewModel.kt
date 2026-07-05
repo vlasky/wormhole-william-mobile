@@ -9,12 +9,14 @@ import io.sanford.wormhole_william.util.formatBytes
 import io.sanford.wormhole_william.util.notifyDownloadManager
 import io.sanford.wormhole_william.util.queryDownloadDisplayName
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import wormhole.PendingTransfer
 
 data class ReceiveUiState(
@@ -115,34 +117,40 @@ class ReceiveViewModel(application: Application) : AndroidViewModel(application)
                         val context = getApplication<Application>()
                         val fileName = _uiState.value.pendingFileName
                         val fileSize = _uiState.value.pendingFileSize
-                        val mimeType = detectMimeType(state.path)
 
-                        val result = context.notifyDownloadManager(
-                            name = fileName,
-                            path = state.path,
-                            mimeType = mimeType,
-                            size = fileSize
-                        )
+                        // The copy to Downloads is file I/O proportional to
+                        // the transfer size; keep it off the main thread so a
+                        // large received file cannot freeze the UI (ANR).
+                        val statusMsg = withContext(Dispatchers.IO) {
+                            val mimeType = detectMimeType(state.path)
 
-                        val statusMsg = result.fold(
-                            onSuccess = { uri ->
-                                // The copy to Downloads succeeded, so the
-                                // internal staging copy is no longer needed.
-                                // Removing it also prevents a later same-named
-                                // transfer from being wrongly blocked as
-                                // "already exists". Only delete on success: if
-                                // the copy failed, the staging file is the only
-                                // copy of the received file and must be kept.
-                                runCatching { File(state.path).delete() }
-                                val savedName = context.queryDownloadDisplayName(uri) ?: fileName
-                                if (savedName != fileName) {
-                                    "Saved to Downloads as $savedName (renamed to avoid overwriting an existing file)"
-                                } else {
-                                    "File saved to Downloads: $savedName"
-                                }
-                            },
-                            onFailure = { e -> "File received but failed to copy to Downloads: ${e.message}" }
-                        )
+                            val result = context.notifyDownloadManager(
+                                name = fileName,
+                                path = state.path,
+                                mimeType = mimeType,
+                                size = fileSize
+                            )
+
+                            result.fold(
+                                onSuccess = { uri ->
+                                    // The copy to Downloads succeeded, so the
+                                    // internal staging copy is no longer needed.
+                                    // Removing it also prevents a later same-named
+                                    // transfer from being wrongly blocked as
+                                    // "already exists". Only delete on success: if
+                                    // the copy failed, the staging file is the only
+                                    // copy of the received file and must be kept.
+                                    runCatching { File(state.path).delete() }
+                                    val savedName = context.queryDownloadDisplayName(uri) ?: fileName
+                                    if (savedName != fileName) {
+                                        "Saved to Downloads as $savedName (renamed to avoid overwriting an existing file)"
+                                    } else {
+                                        "File saved to Downloads: $savedName"
+                                    }
+                                },
+                                onFailure = { e -> "File received but failed to copy to Downloads: ${e.message}" }
+                            )
+                        }
 
                         _uiState.update {
                             it.copy(
