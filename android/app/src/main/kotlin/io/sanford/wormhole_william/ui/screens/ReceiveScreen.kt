@@ -1,5 +1,10 @@
 package io.sanford.wormhole_william.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -32,10 +37,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.sanford.wormhole_william.ui.theme.StatusYellow
 import io.sanford.wormhole_william.ui.theme.StatusYellowText
@@ -50,6 +57,28 @@ fun ReceiveScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
     val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    // Pre-Android 10 needs WRITE_EXTERNAL_STORAGE to copy the received file
+    // into public Downloads. Request it when the user accepts an offer, and
+    // proceed regardless of the outcome: on denial the copy fails with a
+    // clear status message and the file is kept in internal staging.
+    val writePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { viewModel.onAcceptFile() }
+
+    val acceptFile = {
+        val needsWritePermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) != PackageManager.PERMISSION_GRANTED
+        if (needsWritePermission) {
+            writePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            viewModel.onAcceptFile()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -234,7 +263,7 @@ fun ReceiveScreen(
                 }
             },
             confirmButton = {
-                Button(onClick = viewModel::onAcceptFile) {
+                Button(onClick = acceptFile) {
                     Text("Accept")
                 }
             },

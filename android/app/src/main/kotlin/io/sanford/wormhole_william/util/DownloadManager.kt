@@ -14,6 +14,7 @@ import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.FileProvider
 import io.sanford.wormhole_william.R
 import java.io.File
 import java.io.FileInputStream
@@ -60,8 +61,8 @@ fun Context.notifyDownloadManager(
  * name may differ from the requested one.
  */
 fun Context.queryDownloadDisplayName(uri: Uri): String? {
-    // file:// URIs (legacy path) carry the name directly; ContentResolver does
-    // not answer OpenableColumns for them.
+    // Defensive: no caller currently produces file:// URIs, but ContentResolver
+    // cannot answer OpenableColumns for them, so read the name directly.
     if (uri.scheme == "file") return uri.lastPathSegment
     return try {
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
@@ -203,7 +204,10 @@ private fun Context.copyToDownloadsLegacy(
         true
     )
 
-    return Uri.fromFile(destFile)
+    // Hand out a content:// URI via FileProvider: file:// URIs are rejected
+    // by other apps since API 24 (FileUriExposedException), which would break
+    // the completion notification's ACTION_VIEW intent.
+    return FileProvider.getUriForFile(this, "$packageName.fileprovider", destFile)
 }
 
 private fun Context.showDownloadCompleteNotification(name: String, uri: Uri, mimeType: String) {

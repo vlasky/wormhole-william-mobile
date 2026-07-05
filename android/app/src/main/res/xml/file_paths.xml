@@ -6,4 +6,9 @@
     <files-path
         name="files"
         path="." />
+    <!-- Public Downloads folder, used on pre-Android 10 to hand out
+         content:// URIs for files saved by the legacy download path. -->
+    <external-path
+        name="downloads"
+        path="Download/" />
 </paths>
