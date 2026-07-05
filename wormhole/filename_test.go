@@ -26,6 +26,8 @@ func TestSanitizeFilename(t *testing.T) {
 		{"del char replaced", "xy", "x_y"},
 		{"all invalid", `:*?`, "___"},
 		{"directory zip name", "weird:dir.zip", "weird_dir.zip"},
+		{"path traversal is neutralized", "../../evil.sh", ".._.._evil.sh"},
+		{"absolute path is neutralized", "/etc/passwd", "_etc_passwd"},
 		{"empty is invalid", "", "(invalid)"},
 		{"dot is invalid", ".", "(invalid)"},
 		{"dotdot is invalid", "..", "(invalid)"},
