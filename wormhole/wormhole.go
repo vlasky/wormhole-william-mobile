@@ -223,8 +223,18 @@ func (c *Client) Receive(code string, callback ReceiveCallback) {
 					return
 				}
 			}
-			f.Close()
+			// A buffered write can fail at close (e.g. disk full); report it
+			// rather than declaring a truncated staging file complete.
+			if err := f.Close(); err != nil {
+				os.Remove(path)
+				callback.OnError(err.Error())
+				return
+			}
 			callback.OnFileComplete(path)
+
+		default:
+			msg.Reject()
+			callback.OnError("unsupported transfer type")
 		}
 	}()
 }
@@ -272,6 +282,11 @@ func (c *Client) ReceiveWithAccept(code string, callback ReceiveOfferCallback) {
 			}
 
 			callback.OnFileOffer(pending)
+
+		default:
+			msg.Reject()
+			cancel()
+			callback.OnError("unsupported transfer type")
 		}
 	}()
 }

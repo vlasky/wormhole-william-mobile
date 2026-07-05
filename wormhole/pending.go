@@ -78,7 +78,13 @@ func (p *PendingTransfer) Accept() {
 				return
 			}
 		}
-		f.Close()
+		// A buffered write can fail at close (e.g. disk full); report it
+		// rather than declaring a truncated staging file complete.
+		if err := f.Close(); err != nil {
+			os.Remove(path)
+			p.callback.OnError(err.Error())
+			return
+		}
 		p.callback.OnFileComplete(path)
 	}()
 }
